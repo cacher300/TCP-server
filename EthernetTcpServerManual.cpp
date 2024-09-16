@@ -12,7 +12,6 @@ EthernetTcpServer server(PORT_NUM);
 EthernetTcpClient clients[NUMBER_OF_CLIENTS];
 
 void InitServer() {
-    // Set up serial communication
     ConnectorUsb.Mode(Connector::USB_CDC);
     ConnectorUsb.Speed(9600);
     ConnectorUsb.PortOpen();
@@ -22,18 +21,15 @@ void InitServer() {
         continue;
     }
 
-    // Set connectors IO0-IO5 as digital outputs
     for (int i = 0; i < 6; i++) {
         outputLEDs[i]->Mode(Connector::OUTPUT_DIGITAL);
     }
 
-    // Wait until Ethernet cable is connected
     while (!EthernetMgr.PhyLinkActive()) {
         ConnectorUsb.SendLine("The Ethernet cable is unplugged...");
         Delay_ms(1000);
     }
 
-    // Configure with DHCP or static IP
     EthernetMgr.Setup();
     if (usingDhcp) {
         if (EthernetMgr.DhcpBegin()) {
@@ -52,7 +48,6 @@ void InitServer() {
         ConnectorUsb.SendLine(EthernetMgr.LocalIp().StringValue());
     }
     
-    // Start the TCP server
     server.Begin();
     ConnectorUsb.SendLine("Server is listening for connections...");
 }
@@ -94,9 +89,9 @@ bool GetClientMessage(char *messageBuffer, int bufferLength) {
     for (int i = 0; i < NUMBER_OF_CLIENTS; i++) {
         if (clients[i].Connected() && clients[i].BytesAvailable()) {
             int bytesRead = clients[i].Read((unsigned char *)messageBuffer, bufferLength - 1);
-            messageBuffer[bytesRead] = '\0';  // Null-terminate the string
-            return true;  // Message received
+            messageBuffer[bytesRead] = '\0'; 
+            return true;
         }
     }
-    return false;  // No message received
+    return false;
 }
