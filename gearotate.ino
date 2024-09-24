@@ -2,30 +2,43 @@
 #include "EthernetTcpServerManual.h"
 
 
-#define motor ConnectorM0
-#define inputPin ConnectorDI6
-#define JakainputPin ConnectorDI8
+#define sprocket ConnectorM0
+#define gear ConnectorM1
+#define rod ConnectorM2
+
+#define gear_sensor ConnectorDI8
+#define sprocket_sensor ConnectorDI6
 #define baudRate 9600
 #define SerialPort ConnectorUsb
 
-#define velocityLimit 5000 
-#define accelerationLimit 100000
+#define rodVelocityLimit 500 
+#define rodAccelerationLimit 100000
 
+#define gearVelocityLimit 3000 
+#define gearAccelerationLimit 100000
+
+#define sprocketVelocityLimit 3000 
+#define sprocketAccelerationLimit 100000
 
 bool inputState;
-bool homed = false;
-int triggerCount = 0;
+bool gear_homed = false;
+bool sprocket_homed = false;
+bool inputStateGear = false;  
+bool inputStateSprocket = false;  
 
-
-void MoveContinuous();
+void home();
 void ProcessClientMessage(char *message);
 
 void setup() {
     InitServer(); 
     MotorMgr.MotorInputClocking(MotorManager::CLOCK_RATE_LOW);
     MotorMgr.MotorModeSet(MotorManager::MOTOR_ALL, Connector::CPM_MODE_STEP_AND_DIR);
-    motor.VelMax(velocityLimit);
-    motor.AccelMax(accelerationLimit);
+    rod.VelMax(rodVelocityLimit);
+    rod.AccelMax(rodAccelerationLimit);
+    gear.VelMax(gearVelocityLimit);
+    gear.AccelMax(gearAccelerationLimit);
+    sprocket.VelMax(sprocketVelocityLimit);
+    sprocket.AccelMax(sprocketAccelerationLimit);
     
     SerialPort.Mode(Connector::USB_CDC);
     SerialPort.Speed(baudRate);
@@ -36,10 +49,17 @@ void setup() {
         continue;
     }
     SerialPort.SendLine("Serial port opened.");
-    motor.EnableRequest(true);
+    sprocket.EnableRequest(true);
+    gear.EnableRequest(true);
+    rod.EnableRequest(true);
+
     SerialPort.SendLine("Motor enabled.");
-    inputPin.Mode(Connector::INPUT_DIGITAL);
-    SerialPort.SendLine("Input pin set to digital input.");
+    gear_sensor.Mode(Connector::INPUT_DIGITAL);
+    sprocket_sensor.Mode(Connector::INPUT_DIGITAL);
+    SerialPort.SendLine("Input pins set to digital input.");
+    home();
+    Delay_ms(20000);  
+
 }
 
 void loop() {
@@ -55,18 +75,25 @@ void loop() {
 
 
 void ProcessClientMessage(char *message) {
-    if (strcmp(message, "1") == 0) {
+    if (strcmp(message, "GEAR") == 0) {
      
-      motor.Move(-8400);
+      gear.Move(8000);
       Delay_ms(3000);  
-      MoveContinuous();
       SerialPort.SendLine("Done");
-      while(true){
-        Delay_ms(3000);  
-        motor.Move(-15900);
-        Delay_ms(5000);  
-        motor.Move(15900);
-      }
+    }
+
+    if (strcmp(message, "ROD") == 0) {
+     
+      rod.Move(1700);
+      Delay_ms(3000);  
+      SerialPort.SendLine("Done");
+    }
+
+    if (strcmp(message, "SPR") == 0) {
+     
+      sprocket.Move(8000);
+      Delay_ms(3000);  
+      SerialPort.SendLine("Done");
     }
 
     else {
@@ -74,24 +101,33 @@ void ProcessClientMessage(char *message) {
     }
 }
 
-void MoveContinuous() {
-    while (!homed) {
-        inputState = inputPin.State();
-        SerialPort.SendLine("Reading sensor state.");
-        motor.Move(6400);  
+void home() {
+    while (!gear_homed || !sprocket_homed) {
+        if (!gear_homed) {
+            inputStateGear = gear_sensor.State();
+            SerialPort.SendLine("Reading gear sensor state.");
+            gear.Move(6400);  
+            if (inputStateGear) {
+                SerialPort.SendLine("Gear Homed");
+                gear.MoveStopAbrupt();
+                Delay_ms(200);  
+                gear_homed = true;
+            }
+        }
 
-        if (inputState) {
-    
-            triggerCount++;
-            SerialPort.SendLine("YO Induction sensor triggered.");
-            
-            motor.MoveStopAbrupt();
-            SerialPort.SendLine("Motor stopped.");
+        if (!sprocket_homed) {
+            inputStateSprocket = sprocket_sensor.State();
+            SerialPort.SendLine("Reading sprocket sensor state.");
+            sprocket.Move(6400);  
+            if (inputStateSprocket) {
+                SerialPort.SendLine("Sprocket Homed");
+                sprocket.MoveStopAbrupt();
+                Delay_ms(200);  
+                sprocket_homed = true;
+            }
+        }
 
-    
-            Delay_ms(200);  
-            homed = true;
-        } else {
+        if (!inputStateGear && !inputStateSprocket) {
             SerialPort.SendLine("No trigger detected.");
         }
 
