@@ -1,0 +1,98 @@
+#include "ClearCore.h"
+#include "EthernetTcpServerManual.h"
+
+
+
+#define gear ConnectorM0
+
+
+#define gear_sensor ConnectorDI8
+
+#define baudRate 9600
+#define SerialPort ConnectorUsb
+
+#define gearVelocityLimit 3000 
+#define gearAccelerationLimit 100000
+
+bool inputState;
+bool gear_homed = false;
+bool inputStateGear = false;  
+
+void home();
+void ProcessClientMessage(char *message);
+
+void setup() {
+    InitServer(); 
+    MotorMgr.MotorInputClocking(MotorManager::CLOCK_RATE_LOW);
+    MotorMgr.MotorModeSet(MotorManager::MOTOR_ALL, Connector::CPM_MODE_STEP_AND_DIR);
+    gear.VelMax(gearVelocityLimit);
+    gear.AccelMax(gearAccelerationLimit);
+    
+    SerialPort.Mode(Connector::USB_CDC);
+    SerialPort.Speed(baudRate);
+    uint32_t timeout = 6000;
+    uint32_t startTime = Milliseconds();
+    SerialPort.PortOpen();
+    while (!SerialPort && Milliseconds() - startTime < timeout) {
+        continue;
+    }
+    SerialPort.SendLine("Serial port opened.");
+    gear.EnableRequest(true);
+
+    SerialPort.SendLine("Motor enabled.");
+    gear_sensor.Mode(Connector::INPUT_DIGITAL);
+    SerialPort.SendLine("Input pins set to digital input.");
+    home();
+    Delay_ms(20000);  
+
+}
+
+void loop() {
+    ManageClients(); 
+
+    char messageBuffer[MAX_PACKET_LENGTH];
+    if (GetClientMessage(messageBuffer, MAX_PACKET_LENGTH)) {
+        ConnectorUsb.SendLine("Received message: ");
+        ConnectorUsb.SendLine(messageBuffer);
+        ProcessClientMessage(messageBuffer);
+    }
+}
+
+
+void ProcessClientMessage(char *message) {
+    if (strcmp(message, "GEAR") == 0) {
+     
+      gear.Move(8000);
+      Delay_ms(3000);  
+      SerialPort.SendLine("Done");
+    }
+
+    else {
+        SerialPort.SendLine("Unknown command.");
+    }
+}
+
+void home() {
+    while (!gear_homed) {
+        inputStateGear = gear_sensor.State();
+        
+        if (inputStateGear) {
+            SerialPort.SendLine("Sensor detected, moving 7600 steps.");
+            gear.Move(7600);
+            Delay_ms(200); 
+        }
+
+        gear.VelMax(500); 
+        SerialPort.SendLine("Motor speed set to very slow for fine homing.");
+
+        while (!gear_sensor.State()) {
+            gear.Move(50);  
+            Delay_ms(50);   
+        }
+        
+        SerialPort.SendLine("Fine homing completed. Gear is homed.");
+        gear.MoveStopAbrupt();
+        gear_homed = true;
+        Delay_ms(200);  
+    }
+}
